@@ -1,0 +1,15 @@
+node_modules/
+.vercel/
+.tanstack/
+.grok/
+artifacts/
+screenshots/
+dist/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+.node_modules.lock
+AGENTS.md
+scripts/tts-click.mjs
