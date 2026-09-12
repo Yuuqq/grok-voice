@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { assertSameSiteRequest } from "@/lib/auth/isolation.server";
+import { requireUserId, UnauthorizedError } from "@/lib/auth/verify.server";
+import { getSql } from "@/lib/db";
 import { MAX_CHARS, MAX_SPEED, MIN_SPEED, VOICE_IDS } from "@/lib/voices";
 
 const TtsBody = z.object({
@@ -13,6 +16,35 @@ export const Route = createFileRoute("/api/tts")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let userId: string;
+        try {
+          assertSameSiteRequest();
+          const authHeader = request.headers.get("authorization");
+          const bearerToken = authHeader?.startsWith("Bearer ")
+            ? authHeader.slice(7)
+            : undefined;
+          userId = await requireUserId(bearerToken);
+        } catch (err) {
+          const status = err instanceof UnauthorizedError ? 401 : 403;
+          return Response.json({ error: "未授权" }, { status });
+        }
+
+        const sql = await getSql();
+        const windowStart = new Date();
+        windowStart.setSeconds(0, 0); // start of current minute
+
+        const rateRows = await sql`
+          insert into tts_rate_limits (user_id, window_start, request_count)
+          values (${userId}, ${windowStart.toISOString()}, 1)
+          on conflict (user_id, window_start)
+          do update set request_count = tts_rate_limits.request_count + 1
+          returning request_count
+        `;
+
+        if (rateRows[0] && (rateRows[0] as any).request_count > 10) {
+          return Response.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
+        }
+
         const apiKey = process.env.XAI_API_KEY;
         if (!apiKey) {
           return Response.json(

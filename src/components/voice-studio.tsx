@@ -4,6 +4,7 @@ import { Pause, Play, RotateCcw, Square } from "lucide-react";
 import { toast } from "sonner";
 import { AuthChip } from "@/components/auth-chip";
 import { Waveform } from "@/components/waveform";
+import { getBearerToken } from "@/lib/auth/client";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_SPEED,
@@ -68,8 +69,8 @@ export function VoiceStudio() {
       if (storedVoice && GROK_VOICES.some((item) => item.id === storedVoice)) {
         setVoiceId(storedVoice);
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn(err);
     }
   }, []);
 
@@ -77,8 +78,8 @@ export function VoiceStudio() {
     try {
       localStorage.setItem(SPEED_KEY, String(speed));
       localStorage.setItem(VOICE_KEY, voiceId);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn(err);
     }
   }, [speed, voiceId]);
 
@@ -154,9 +155,13 @@ export function VoiceStudio() {
     setStatus("loading");
     setProgress(0);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = getBearerToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const res = await fetch("/api/tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           text: trimmed,
           voice_id: voiceId,
